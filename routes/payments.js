@@ -33,14 +33,35 @@ router.post('/create-payment-link', async (req, res) => {
     }
 
     // Create Stripe customer if not exists
+    // if (!user.stripeCustomerId) {
+    //   const customer = await stripe.customers.create({
+    //     email: email,
+    //     metadata: { userId: user._id.toString() }
+    //   });
+    //   user.stripeCustomerId = customer.id;
+    //   await user.save();
+    // }
+
     if (!user.stripeCustomerId) {
-      const customer = await stripe.customers.create({
+      // Try to find existing customer in Stripe
+      const existingCustomers = await stripe.customers.list({
         email: email,
-        metadata: { userId: user._id.toString() }
+        limit: 1,
       });
-      user.stripeCustomerId = customer.id;
+
+      if (existingCustomers.data.length > 0) {
+        user.stripeCustomerId = existingCustomers.data[0].id;
+      } else {
+        const customer = await stripe.customers.create({
+          email: email,
+          metadata: { userId: user._id.toString() },
+        });
+        user.stripeCustomerId = customer.id;
+      }
+
       await user.save();
     }
+
 
     // Generate unique payment ID
     const paymentId = uuidv4();
@@ -193,13 +214,56 @@ router.get('/status/:id', async (req, res) => {
 });
 
 // Get payments for email
-router.get('/history/:email', async (req, res) => {
-  try {
-    const payments = await Payment.find({ email: req.params.email })
-      .sort({ createdAt: -1 })
-      .limit(50);
+router.get('/history', async (req, res) => {
+  // try {
+  //   const { email } = req.query;
+  //   const payments = await Payment.find({ email })
+  //     .sort({ createdAt: -1 })
+  //     .limit(50);
 
-    const formattedPayments = payments.map(payment => ({
+  //   const formattedPayments = payments.map(payment => ({
+  //     id: payment.id,
+  //     amount: payment.amountCents / 100,
+  //     status: payment.status,
+  //     createdAt: payment.createdAt,
+  //     expiresAt: payment.expiresAt,
+  //     paidAt: payment.paidAt
+  //   }));
+
+  //   res.json(formattedPayments);
+
+  // } catch (error) {
+  //   console.error('Payment history error:', error);
+  //   res.status(500).json({ error: 'Failed to get payment history' });
+  // }
+  const { email, status, startDate, endDate } = req.query;
+
+  if (!email) {
+    return res.status(400).json({ error: 'Email parameter is required.' });
+  }
+
+  try {
+    const query = { email };
+
+    // Optional: Filter by status
+    if (status) {
+      query.status = status;
+    }
+
+    // Optional: Filter by date range
+    if (startDate) {
+      query.createdAt = query.createdAt || {};
+      query.createdAt.$gte = new Date(startDate);
+    }
+
+    if (endDate) {
+      query.expiresAt = query.expiresAt || {};
+      query.expiresAt.$lte = new Date(endDate);
+    }
+
+    const payments = await Payment.find(query);
+
+    const formatted = payments.map(payment => ({
       id: payment.id,
       amount: payment.amountCents / 100,
       status: payment.status,
@@ -208,11 +272,10 @@ router.get('/history/:email', async (req, res) => {
       paidAt: payment.paidAt
     }));
 
-    res.json(formattedPayments);
-
-  } catch (error) {
-    console.error('Payment history error:', error);
-    res.status(500).json({ error: 'Failed to get payment history' });
+    res.json(formatted);
+  } catch (err) {
+    console.error('Error fetching invoices:', err);
+    res.status(500).json({ error: 'Server error while fetching invoices.' });
   }
 });
 

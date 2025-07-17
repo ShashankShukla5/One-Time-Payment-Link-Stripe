@@ -41,9 +41,9 @@ app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), asy
     const email = session.metadata?.email;
     const finalizedInvoiceId = session.metadata?.finalizedInvoiceId;
 
-    // console.log(session)
+    const payment = await Payment.find({id: paymentId})
+    const linkId = payment[0]?.stripePaymentIntentId
 
-    console.log("Customer Id: ", customerId)
 
     if (paymentId) {
       await Payment.findOneAndUpdate(
@@ -51,72 +51,30 @@ app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), asy
         {
           status: 'paid',
           paidAt: new Date(),
-          stripePaymentIntentId: session.id
         }
       );
     }
 
     console.log('Retrieved PI amount:', session.amount_total);
 
-    // const draftInvoice = await stripe.invoices.create({
-    //   customer: customerId,
-    //   auto_advance: false,
-    //   pending_invoice_items_behavior: 'exclude',
-    // });
-
-    // await stripe.invoiceItems.create({
-    //   customer: customerId,
-    //   invoice: draftInvoice.id, // This links it to the specific invoice
-    //   amount: session.amount_total,
-    //   currency: session.currency,
-    //   description: 'Invoice for one-time payment via payment link',
-    // });
-
-    // const finalizedInvoice = await stripe.invoices.finalizeInvoice(draftInvoice.id);
-
-    // // await stripe.invoices.pay(finalizedInvoice.id, {
-    // //   payment_intent: session.payment_intent, // Use the Checkout Session's payment intent
-    // // });
-
     await stripe.invoices.pay(finalizedInvoiceId, {
-      paid_out_of_band: true, // Indicates payment was received outside Stripe
+      paid_out_of_band: true,
     });
 
-    // // 3. Wait for invoice_pdf
-    // let invoice = finalizedInvoice;
-    // for (let i = 0; i < 5; i++) {
-    //   invoice = await stripe.invoices.retrieve(finalizedInvoice.id);
-    //   if (invoice.invoice_pdf) break;
-    //   await new Promise(res => setTimeout(res, 1000)); // wait 1s
-    // }
-
-    // if (!invoice.invoice_pdf) {
-    //   throw new Error('Invoice PDF not available after waiting');
-    // }
-
-    // // // 4. Download invoice PDF
-    // const pdfResponse = await axios.get(invoice.invoice_pdf, {
-    //   responseType: 'arraybuffer'
-    // });
-
-    // const pdfBuffer = pdfResponse.data;
-
-    // console.log('Invoice created:', invoice.id);
-
-
-
-    // await sendPaymentSuccessEmail(email, (session.amount_total / 100).toFixed(2), paymentId, pdfBuffer);
-
-    // await stripe.paymentIntents.update(session.payment_intent, {
-    //   receipt_email: email, // Auto-sends receipt
-    // });
+    console.log("link id: ", linkId)
+    await stripe.paymentLinks.update(linkId, {
+      active: false
+    });
 
     console.log(`Payment success email sent to ${email}`);
   }
 
-  if(event.type === 'invoice.paid') {
+  if (event.type === 'invoice.paid') {
     const session = event.data.object;
     const paymentId = session.metadata.paymentId;
+
+    const payment = await Payment.find({id: paymentId})
+    const linkId = payment[0]?.stripePaymentIntentId
 
     if (paymentId) {
       await Payment.findOneAndUpdate(
@@ -124,12 +82,14 @@ app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), asy
         {
           status: 'paid',
           paidAt: new Date(),
-          stripePaymentIntentId: session.id
         }
       );
     }
 
-    console.log('session: ', session)
+    console.log("link id: ", linkId)
+    await stripe.paymentLinks.update(linkId, {
+      active: false
+    });
   }
 
   res.json({ received: true });
