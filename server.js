@@ -18,8 +18,7 @@ const ALTERNATIVE_PORT = 5001; // Alternative port if default is in use
 
 // CORS configuration
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
-  credentials: true
+  origin: '*', 
 }));
 
 // Important: Raw body parser for Stripe webhooks must come before JSON parser
