@@ -163,10 +163,37 @@ app.get('/api/health', (req, res) => {
   res.json({ message: 'Server is running', timestamp: new Date().toISOString() });
 });
 
-// Try to start the server with error handling
+// // Try to start the server with error handling
+// const startServer = (port) => {
+//   return new Promise((resolve, reject) => {
+//     const server = app.listen(port)
+//       .once('listening', () => {
+//         console.log(`Server running on port ${port}`);
+//         resolve(server);
+//       })
+//       .once('error', (err) => {
+//         reject(err);
+//       });
+//   });
+// };
+
+// // Try primary port first, then fallback to alternative
+// startServer(PORT)
+//   .catch(err => {
+//     if (err.code === 'EADDRINUSE') {
+//       console.log(`Port ${PORT} is already in use, trying alternative port ${ALTERNATIVE_PORT}`);
+//       return startServer(ALTERNATIVE_PORT);
+//     }
+//     throw err;
+//   })
+//   .catch(err => {
+//     console.error('Failed to start server:', err);
+//     process.exit(1);
+//   });
+
 const startServer = (port) => {
   return new Promise((resolve, reject) => {
-    const server = app.listen(port)
+    const server = app.listen(port, '0.0.0.0')
       .once('listening', () => {
         console.log(`Server running on port ${port}`);
         resolve(server);
@@ -177,7 +204,6 @@ const startServer = (port) => {
   });
 };
 
-// Try primary port first, then fallback to alternative
 startServer(PORT)
   .catch(err => {
     if (err.code === 'EADDRINUSE') {
