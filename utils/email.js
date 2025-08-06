@@ -1,12 +1,38 @@
-import { Resend } from 'resend';
+import nodemailer from 'nodemailer';
 
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,          // e.g. smtp.gmail.com, email-smtp.us-east-1.amazonaws.com …
+  port: Number(process.env.SMTP_PORT),  // 465 for SSL, 587 for STARTTLS
+  secure: process.env.SMTP_SECURE === 'true', // true ⇢ port 465
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS
+  }
+});
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+transporter.verify().then(() => {
+  console.log('SMTP connection ready');
+}).catch(console.error);
 
-export const sendPaymentLinkEmail = async (email, paymentLink, amount, paymentId, pdfBuffer) => {
+async function sendMail(options) {
   try {
-    const emailHtml = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+    await transporter.sendMail(options);
+    console.log(`Email sent to ${options.to}`);
+  } catch (err) {
+    console.error('Email error:', err);
+    throw err;
+  }
+}
+
+export async function sendPaymentLinkEmail(
+  email,
+  paymentLink,
+  amount,
+  paymentId,
+  pdfBuffer
+) {
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; border-radius: 10px; text-align: center;">
           <h1 style="margin: 0; font-size: 28px;">Payment Request</h1>
           <p style="margin: 10px 0 0 0; font-size: 16px; opacity: 0.9;">You have a payment request</p>
@@ -35,33 +61,31 @@ export const sendPaymentLinkEmail = async (email, paymentLink, amount, paymentId
           </div>
         </div>
       </div>
-    `;
+  `;
 
-    await resend.emails.send({
-      from: "onboarding@resend.dev",
-      to: email,
-      subject: `Payment Request - $${amount}`,
-      html: emailHtml,
-      attachments: [
-        {
-          filename: `invoice-${paymentId}.pdf`,
-          content: pdfBuffer.toString('base64'),
-          type: 'application/pdf',
-        }
-      ]
-    });
+  return sendMail({
+    from: process.env.SMTP_USER,
+    to: email,
+    subject: `Payment Request - $${amount}`,
+    html,
+    attachments: [
+      {
+        filename: `invoice-${paymentId}.pdf`,
+        content: pdfBuffer,
+        contentType: 'application/pdf'
+      }
+    ]
+  });
+}
 
-    console.log(`Payment link email sent to ${email}`);
-  } catch (error) {
-    console.error('Email sending error:', error);
-    throw error;
-  }
-};
-
-export const sendExpiryWarningEmail = async (email, paymentLink, amount, paymentId) => {
-  try {
-    const emailHtml = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+export async function sendExpiryWarningEmail(
+  email,
+  paymentLink,
+  amount,
+  paymentId
+) {
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: white; padding: 30px; border-radius: 10px; text-align: center;">
           <h1 style="margin: 0; font-size: 28px;">Payment Link Expiring Soon</h1>
           <p style="margin: 10px 0 0 0; font-size: 16px; opacity: 0.9;">Your payment link expires in 2 days</p>
@@ -90,26 +114,24 @@ export const sendExpiryWarningEmail = async (email, paymentLink, amount, payment
           </div>
         </div>
       </div>
-    `;
+  `;
 
-    await resend.emails.send({
-      from: "onboarding@resend.dev",
-      to: email,
-      subject: `Payment Link Expiring Soon - $${amount}`,
-      html: emailHtml
-    });
+  return sendMail({
+    from: process.env.SMTP_USER,
+    to: email,
+    subject: `Payment Link Expiring Soon - $${amount}`,
+    html
+  });
+}
 
-    console.log(`Expiry warning email sent to ${email}`);
-  } catch (error) {
-    console.error('Expiry warning email error:', error);
-    throw error;
-  }
-};
-
-export const sendPaymentSuccessEmail = async (email, amount, paymentId, pdfBuffer) => {
-  const subject = 'Payment Successful';
-
-  const emailHtml = `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; background: #f9f9f9;">
+export async function sendPaymentSuccessEmail(
+  email,
+  amount,
+  paymentId,
+  pdfBuffer
+) {
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; background: #f9f9f9;">
       <h2 style="color: #0d6efd;">Payment Successful</h2>
       <p>Hi there,</p>
       <p>Thank you! We've successfully received your payment of <strong>${amount}</strong>.</p>
@@ -126,27 +148,20 @@ export const sendPaymentSuccessEmail = async (email, amount, paymentId, pdfBuffe
       <p style="margin-top: 20px;">If you have any questions, just reply to this email. We're happy to help!</p>
       <p style="margin-top: 40px;">– The Team</p>
     </div>
-  `
+  `;
 
-  console.log("Email: ", email)
+  return sendMail({
+    from: process.env.SMTP_USER,
+    to: email,
+    subject: 'Payment Successful',
+    html,
+    attachments: [
+      {
+        filename: `invoice-${paymentId}.pdf`,
+        content: pdfBuffer,
+        contentType: 'application/pdf'
+      }
+    ]
+  });
+}
 
-  try {
-    await resend.emails.send({
-      from: "onboarding@resend.dev",
-      to: email,
-      subject: `Payment Successful`,
-      html: emailHtml,
-      attachments: [
-        {
-          filename: `invoice-${paymentId}.pdf`,
-          content: pdfBuffer.toString('base64'),
-          type: 'application/pdf',
-        }
-      ]
-    });
-
-    console.log('Payment success email sent');
-  } catch (error) {
-    console.error('Failed to send email:', error);
-  }
-};
